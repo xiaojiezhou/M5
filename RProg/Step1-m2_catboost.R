@@ -80,7 +80,7 @@ create_fea <- function(dt) {
   
   # cols = dt[, names(.SD), .SDcols = sapply(dt, is.list)]  
   # dt[, (cols) := lapply(.SD, unlist), .SDcols=cols]  #--- unlist colunms
-  
+    
   
   cols = c("sales")
   win <- c(7, 28) # rolling window size
@@ -95,23 +95,26 @@ create_fea <- function(dt) {
 }
 
 #---- read in data & add features -----
-dt <- create_dt()
+# dt <- create_dt()
 free()
 
-create_fea(dt)
+# create_fea(dt)
 free()
-fwrite(dt, file='adata/dt_m2.gz')
+# fwrite(dt, file='adata/dt_m2.gz')
 # dt = fread('adata/dt_m2.gz')
 
 
 #--- split the data into test, validation and training ----
+# dt = fread('adata/dt_m2.gz')
+# dt = fread('adata/dt_m2_revised.gz')
+
 # Response and features
 y <- "sales"
 x <- setdiff(colnames(dt), c("sales", "d", "id", "date", "year"))
 dt[,max(d)]
 
 #test <- dt[d > tr_last & d<=tr_last+h, ..x]
-test <- dt[d > tr_last ]
+test <- dt[d > tr_last & d <= (tr_last+2*h) ]
 
 # training period
 sales = dt[d  <= tr_last, sales]
@@ -126,18 +129,18 @@ free()
 set.seed(3134)
 cat_features=c(1:9, 17:20)
 idx <- sample(nrow(dt), trunc(0.1 * nrow(dt)))
-train <- catboost.load_pool(dt[-idx], label = sales[-idx], 
-                            cat_features = cat_features - 1)
-valid <- catboost.load_pool(dt[idx], label = sales[idx],
-                            cat_features = cat_features - 1)
+#train <- catboost.load_pool(dt[-idx], label = sales[-idx], 
+#                            cat_features = cat_features - 1)
+#valid <- catboost.load_pool(dt[idx], label = sales[idx],
+#                            cat_features = cat_features - 1)
 
-train <- catboost.load_pool(dt[-idx], label = sales[-idx])
-valid <- catboost.load_pool(dt[idx], label = sales[idx])
+ train <- catboost.load_pool(dt[-idx], label = sales[-idx])
+ valid <- catboost.load_pool(dt[idx], label = sales[idx])
 free()
 
 ########### CatBoost! ###########
 # Parameters
-params <- list(iterations = 100,
+params <- list(iterations = 2000,
                metric_period = 50,
                #       task_type = "GPU",
                loss_function = "RMSE",
@@ -145,7 +148,7 @@ params <- list(iterations = 100,
                random_strength = 0.5,
                depth = 7,
                # early_stopping_rounds = 400,
-               # learning_rate = 0.1,
+               # learning_rate = 0.2,
                l2_leaf_reg = 0.1,
                random_seed = 93)
 
@@ -162,41 +165,35 @@ catboost.get_feature_importance(fit, valid) %>%
   geom_bar(stat = "identity") +
   coord_flip()
 
-########### Submission ###########
-# Day by day predictions
-day = (tr_last+2)
-for (day in (tr_last+1):((tr_last+1) + h - 1)){
-  cat(".")
-  test %>% 
-    filter(between(d, day - 56, day)) %>% 
-     filter(d == day) %>% 
-    select_at(x) %>% 
-    catboost.load_pool() %>% 
-    catboost.predict(fit, .) * 1.03 %>% View(.) # https://www.kaggle.com/kyakovlev/m5-dark-magic
-}
 
-# Reshape to submission structure
-submission <- test %>% 
-  mutate(id = paste(id, ifelse(d < (tr_last+1) + h, "validation", "evaluation"), sep = "_"),
-         F = paste0("F", d - (tr_last+1) + 1 - h * (d >= (tr_last+1) + h))) %>% 
-  select(id, F, sales) %>% 
-  spread(F, sales, fill = 1) %>% 
+########### Submission ###########
+
+unique(test$d)
+
+test_pool =  test %>%   select_at(x) %>% 
+  catboost.load_pool()
+
+test$pred = catboost.predict(fit, test_pool)*1.03
+
+results = test %>% 
+  mutate(id = ifelse(d <= tr_last + h, id, gsub("validation", "evaluation",id)),
+         F = paste0("F", d - tr_last - h * (d >= tr_last + h)+1),
+         demand=ifelse(d <= tr_last + h, pred, 1)
+         ) %>% 
+  select(id, F, demand) %>% 
+  spread(F, demand, fill = 1) %>% 
   select_at(c("id", paste0("F", 1:h)))
 
-# my_write_csv_gz(submission)
+fname =  paste0(path, 'rawdata/sample_submission.csv'); fname
+
+submission_2 = fread(fname)%>% select(id) %>%
+  left_join( results, by='id')
 
 
-#------ Junk:  Create data for training -----
 
-library(catboost)
 
-sales=as.numeric(tr$sales)
-tr = (tr[, -c(1,7,8)])
-free()
+#my_write_csv_gz(submission_2)
+my_write_csv(submission_2)
 
-input_pool = catboost.load_pool(tr,  sales, cat_features = c(1:9, 17:21))
-free()
-
-#----- train the model -------
-trained_model <- catboost.train(train_pool, params = list(iterations = 200))
+max(test$d)
 

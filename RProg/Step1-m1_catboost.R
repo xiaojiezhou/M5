@@ -44,7 +44,7 @@ demand_features <- function(X) {
 # Constants ----
 FIRST <- 1914 # Start to predict from this "d"
 LENGTH <- 28  # Predict so many days
-nrows=3; nrows=Inf
+nrows=Inf
 
 # Data ----
 main <- "rawdata"
@@ -68,15 +68,21 @@ train <- train %>%
   demand_features() %>% 
   filter(d >= FIRST | !is.na(roll_lag28_w28))
 
+# fwrite(train, file='adata/train_m1.gz')
+# fwrite(train, file='adata/train_m1_1000.gz')
+
+
+########### split the data into test, validation and training ########
+# train = fread('adata/train_m1.gz')
+# train = fread('adata/train_m1_1000.gz')
+
 # Response and features
 y <- "demand"
 x <- setdiff(colnames(train), c(y, "d", "id"))
 
-fwrite(train, file='adata/train_m1.gz')
-# train = fread('adata/train_m1.gz')
+#  test <-   filter(train, d >= FIRST)
+test <-   filter(train, d >= FIRST - 56)  #Why?? is this for rolling forecast???
 
-########### split the data into test, validation and training ########
-test <-   filter(train, d >= FIRST)
 
 train <- filter(train, d < FIRST)
 
@@ -91,7 +97,7 @@ free()
 
 ########### CatBoost! ###########
 # Parameters
-params <- list(iterations = 10,
+params <- list(iterations = 2000,
                metric_period = 100,
                #       task_type = "GPU",
                loss_function = "RMSE",
@@ -116,30 +122,60 @@ catboost.get_feature_importance(fit, valid) %>%
   coord_flip()
 
 ########### Submission ###########
-# Day by day predictions
+# test <-   filter(train, d >= FIRST)
+test <-   filter(train, d >= FIRST - 56)  #Why?? is this for rolling forecast???
+
+#--- rolling forecast ----
 for (day in FIRST:(FIRST + LENGTH - 1)) {
   cat(".")
   test[test$d == day, y] <- test %>% 
     filter(between(d, day - 56, day)) %>% 
-#    demand_features() %>% 
+    demand_features() %>% 
     filter(d == day) %>% 
     select_at(x) %>% 
     catboost.load_pool() %>% 
-    catboost.predict(fit, .) * 1.03 # https://www.kaggle.com/kyakovlev/m5-dark-magic
+#    catboost.predict(fit, .) * (1.025 + 0.01 * (day > 1928)) # https://www.kaggle.com/kyakovlev/m5-dark-magic
+   catboost.predict(fit, .) 
 }
-
+  
 # Reshape to submission structure
 submission <- test %>% 
   mutate(id = paste(id, ifelse(d < FIRST + LENGTH, "validation", "evaluation"), sep = "_"),
-         F = paste0("F", d - FIRST + 1 - LENGTH * (d >= FIRST + LENGTH))) %>% 
+         F = paste0("F", d - FIRST + 1 - LENGTH * (d >= FIRST + LENGTH)),
+         demand = ifelse(demand<0, 0, demand)) %>% 
   select(id, F, demand) %>% 
   spread(F, demand, fill = 1) %>% 
   select_at(c("id", paste0("F", 1:LENGTH)))
 
-my_write_csv_gz(submission)
-
+my_write_csv(submission)
 
 ########### ! ###########
+
+
+
+############ Delete forecast ################
+test_pool =  test %>%   select_at(x) %>% 
+  catboost.load_pool()
+
+test$pred = catboost.predict(fit, test_pool)*1.03
+
+#--- reshape to submission structure
+rslt = test %>% 
+  mutate(id = paste(id, ifelse(d < FIRST + LENGTH, "validation", "evaluation"), sep = "_"),
+         F = paste0("F", d - FIRST + 1 - LENGTH * (d >= FIRST + LENGTH)),
+         demand=ifelse(d <= FIRST+LENGTH-1, pred, NA),
+         demand = ifelse(demand<0, 0, demand)) %>%       
+  select(id, F, demand) %>% 
+  spread(F, demand, fill = 1) %>% 
+  select_at(c("id", paste0("F", 1:LENGTH)))
+
+fname =  paste0(path, 'rawdata/sample_submission.csv'); fname
+
+submission = fread(fname) %>% select(id) %>%
+  left_join( rslt, by='id')
+
+my_write_csv(submission)
+#my_write_csv_gz(submission)
 
 ########### ! ###########
 
