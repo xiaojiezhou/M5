@@ -3,10 +3,10 @@ tmp = ls()
 tmp = setdiff(tmp, c("")); tmp
 rm(list=c(tmp, 'tmp'))
 
-path = "/Users/x644435/Documents/Private/kaggle/M5/"
+path = "/Users/xiaojiezhou/Documents/DataScience/Kaggle/M5/"
 setwd(paste(path))
 
-source("/Users/x644435/Desktop/OftenUsed/RCode/FreqUsedRFunc.r")
+source("/Users/xiaojiezhou/Documents/OftenUsed/RCode/FreqUsedRFunc.r")
 
 
 ########### Packages, constants, data, functions¶ ############
@@ -16,10 +16,12 @@ suppressMessages({
   library(data.table)
   library(RcppRoll)
   if (packageVersion("catboost") < "0.22") { # At the time of writing, only version 0.12 is on Kaggle which e.g. does not support early_stopping_rounds
-    devtools::install_url('https://github.com/catboost/catboost/releases/download/v0.22/catboost-R-Linux-0.22.tgz', INSTALL_opts = c("--no-multiarch"))  
+    devtools::install_url('https://github.com/catboost/catboost/releases/download/v0.23/catboost-R-Darwin-0.23.tgz', INSTALL_opts = c("--no-multiarch"))  
   }
   library(catboost)
 })
+
+
 
 # Functions ----
 
@@ -68,13 +70,15 @@ train <- train %>%
   demand_features() %>% 
   filter(d >= FIRST | !is.na(roll_lag28_w28))
 
-# fwrite(train, file='adata/train_m1.gz')
-# fwrite(train, file='adata/train_m1_1000.gz')
+
+
+## fwrite(train, file='adata/train_m1.gz')
+# fwrite(train, file='adata/train_m1_drop_1000.gz')
 
 
 ########### split the data into test, validation and training ########
-# train = fread('adata/train_m1.gz')
-# train = fread('adata/train_m1_1000.gz')
+## train = fread('adata/train_m1.gz')
+# train = fread('adata/train_m1_drop_1000.gz')
 
 # Response and features
 y <- "demand"
@@ -97,15 +101,15 @@ free()
 
 ########### CatBoost! ###########
 # Parameters
-params <- list(iterations = 2000,
-               metric_period = 100,
+params <- list(iterations = 100,
+               metric_period = 5,
                #       task_type = "GPU",
-               loss_function = "RMSE",
-               eval_metric = "RMSE",
+               loss_function = "MAPE",
+               eval_metric = "MAPE",
                random_strength = 0.5,
                depth = 7,
-               # early_stopping_rounds = 400,
-               learning_rate = 0.2,
+               early_stopping_rounds = 10,
+               # learning_rate = 0.2,
                l2_leaf_reg = 0.1,
                random_seed = 93)
 
@@ -122,8 +126,8 @@ catboost.get_feature_importance(fit, valid) %>%
   coord_flip()
 
 ########### Submission ###########
-# test <-   filter(train, d >= FIRST)
-test <-   filter(train, d >= FIRST - 56)  #Why?? is this for rolling forecast???
+# train = fread('adata/train_m1_drop_1000.gz')
+# test <-   filter(train, d >= FIRST - 56)  #Why?? is this for rolling forecast???
 
 #--- rolling forecast ----
 for (day in FIRST:(FIRST + LENGTH - 1)) {
@@ -134,8 +138,8 @@ for (day in FIRST:(FIRST + LENGTH - 1)) {
     filter(d == day) %>% 
     select_at(x) %>% 
     catboost.load_pool() %>% 
-#    catboost.predict(fit, .) * (1.025 + 0.01 * (day > 1928)) # https://www.kaggle.com/kyakovlev/m5-dark-magic
-   catboost.predict(fit, .) 
+    catboost.predict(fit, .) * (1.025 + 0.01 * (day > 1928)) # https://www.kaggle.com/kyakovlev/m5-dark-magic
+#   catboost.predict(fit, .) 
 }
   
 # Reshape to submission structure
