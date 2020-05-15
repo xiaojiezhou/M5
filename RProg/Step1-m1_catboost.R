@@ -68,24 +68,16 @@ train <- train %>%
   mutate(demand = as.numeric(demand)) %>% 
   mutate_if(is.factor, as.integer) %>% 
   demand_features() %>% 
-  filter(d >= FIRST | !is.na(roll_lag28_w28)) 
+  filter(d >= FIRST | !is.na(roll_lag28_w28))
 
 
 
-<<<<<<< HEAD
 ## fwrite(train, file='adata/train_m1.gz')
-=======
-# fwrite(train, file='adata/train_m1_all.gz')
->>>>>>> refs/remotes/origin/master
 # fwrite(train, file='adata/train_m1_drop_1000.gz')
 
 
 ########### split the data into test, validation and training ########
-<<<<<<< HEAD
 ## train = fread('adata/train_m1.gz')
-=======
-# train = fread('adata/train_m1_all.gz')
->>>>>>> refs/remotes/origin/master
 # train = fread('adata/train_m1_drop_1000.gz')
 
 # Response and features
@@ -109,13 +101,8 @@ free()
 
 ########### CatBoost! ###########
 # Parameters
-<<<<<<< HEAD
 params <- list(iterations = 100,
                metric_period = 5,
-=======
-params <- list(iterations = 2000,
-               metric_period = 50,
->>>>>>> refs/remotes/origin/master
                #       task_type = "GPU",
                loss_function = "MAPE",
                eval_metric = "MAPE",
@@ -139,13 +126,8 @@ catboost.get_feature_importance(fit, valid) %>%
   coord_flip()
 
 ########### Submission ###########
-<<<<<<< HEAD
 # train = fread('adata/train_m1_drop_1000.gz')
 # test <-   filter(train, d >= FIRST - 56)  #Why?? is this for rolling forecast???
-=======
-# test <-   filter(train, d >= FIRST)
-test <-   filter(train, d >= FIRST - 56)  #for rolling forecast
->>>>>>> refs/remotes/origin/master
 
 #--- rolling forecast ----
 for (day in FIRST:(FIRST + LENGTH - 1)) {
@@ -157,14 +139,9 @@ for (day in FIRST:(FIRST + LENGTH - 1)) {
     select_at(x) %>% 
     catboost.load_pool() %>% 
     catboost.predict(fit, .) * (1.025 + 0.01 * (day > 1928)) # https://www.kaggle.com/kyakovlev/m5-dark-magic
-<<<<<<< HEAD
 #   catboost.predict(fit, .) 
-=======
-#   catboost.predict(fit, .) #without multiplier
->>>>>>> refs/remotes/origin/master
 }
-
-
+  
 # Reshape to submission structure
 submission <- test %>% 
   mutate(id = paste(id, ifelse(d < FIRST + LENGTH, "validation", "evaluation"), sep = "_"),
