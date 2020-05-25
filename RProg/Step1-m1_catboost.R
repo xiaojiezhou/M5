@@ -101,15 +101,15 @@ free()
 
 ########### CatBoost! ###########
 # Parameters
-params <- list(iterations = 100,
+params <- list(iterations = 2000,
                metric_period = 5,
                #       task_type = "GPU",
-               loss_function = "MAPE",
-               eval_metric = "MAPE",
+               loss_function = "RMSE",
+               eval_metric = "RMSE",
                random_strength = 0.5,
                depth = 7,
-               early_stopping_rounds = 10,
-               # learning_rate = 0.2,
+               # early_stopping_rounds = 400,
+               learning_rate = 0.2,
                l2_leaf_reg = 0.1,
                random_seed = 93)
 

@@ -24,10 +24,10 @@ library(ggplot2)
 set.seed(0)
 
 h <- 28 # forecast horizon
-max_lags <- 420 # number of observations to shift by
 tr_last <- 1913 # last training day
-fday <- as.IDate("2016-04-25") # first day to forecast
 nrows <- Inf
+# max_lags <- 420 # number of observations to shift by
+# fday <- as.IDate("2016-04-25") # first day to forecast
 
 
 #---- functions -----
@@ -37,11 +37,11 @@ create_dt <- function(nrows = Inf) {
   
     dt <- fread("/Users/x644435/Documents/Private/kaggle/M5/rawdata/sales_train_validation.csv", nrows = nrows)
     cols <- dt[, names(.SD), .SDcols = patterns("^d_")]
-    #dt[, (cols) := transpose(lapply(transpose(.SD),
-    #                                function(x) {
-    #                                  i <- min(which(x > 0))
-    #                                  x[1:i-1] <- NA
-    #                                  x})), .SDcols = cols] # remove leading 0s
+    dt[, (cols) := transpose(lapply(transpose(.SD),
+                                    function(x) {
+                                      i <- min(which(x > 0))
+                                      x[1:i-1] <- NA
+                                      x})), .SDcols = cols] # remove leading 0s
     
     free()
 
